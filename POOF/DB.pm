@@ -1,11 +1,47 @@
-#!/usr/bin/perl
-
-# DB.pm has general subroutines for the database.
-# a reference this object can be passed around to objects,
-# or objects can create their own 
-# so they have an independent commit/rollback thread
-
 package Object::POOF::DB;
+
+=head1 NAME
+
+Object::POOF::DB - database transaction thread object for POOF:
+Perl Object Oriented Framework.
+
+=head1 DESCRIPTION
+
+Your object that inherits this one is a database connection and
+transaction thread.  You can share it among POOF objects by passing it
+into their constructors as 'db' (Shepherd usually does this.)
+Create a new one and pass it around as an independent transaction thread.
+
+You create a DB object in your namespace as the following:
+
+ package Sample::DB;
+
+ require Object::POOF::DB;
+ @ISA = qw(Object::POOF::DB);
+
+ sub init {
+     my ($self,$p)    = @_;
+     $self->{dbname}  = "database_name";
+     $self->{dbhost}  = "database_host";
+     $self->{dbuname} = "database_uname";
+     $self->{dbpass}  = "database_passwd";
+     
+     # right now we only work with mysql
+     $self->{dsn} = "dbi:mysql:dbname=".$self->{dbname}
+                    .";host=".$self->{dbhost};
+     
+     # always call the SUPER::init
+     $self->SUPER::init or return undef;
+     return 1;
+ }
+
+ 1;
+
+Always call the SUPER::init function from most init functions in POOF.
+Note that you don't need a constructor in your object.  The POOF::DB
+constructor is inherited.
+
+=cut
 
 use strict;
 use warnings;
@@ -199,6 +235,19 @@ sub olddynfields {
 	return $self->{fields};
 }
 
-
-
 1;
+
+=head1 SEE ALSO
+
+Object::POOF(3)
+Object::POOF::App(3)
+
+=head1 AUTHOR
+
+Copyright 2005 Mark Hedges E<lt>hedges@ucsd.eduE<gt>, CPAN: MARKLE
+
+=head1 LICENSE
+
+Released under the standard Perl license (GPL/Artistic).
+
+=cut

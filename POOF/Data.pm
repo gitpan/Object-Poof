@@ -212,3 +212,43 @@ sub table_info {
 
 
 1;
+
+
+
+
+=head1 NAME
+
+Object::POOF::Data - Importable class and instance methods for
+POOF: Perl Object Oriented Framework.
+
+=head1 SYNOPSIS
+
+All objects created inheriting Object::POOF or specialized classes
+like Object::POOF::User already get all these routines.  To get them
+as class methods, do:
+
+    use Object::POOF::Data qw(getOneClass dbh);
+
+Or something like that.
+
+=head1 DESCRIPTION
+
+=head1 SEE ALSO
+
+Object::POOF(3),
+Object::POOF::Data::Shepherd(3),
+Object::POOF::DB(3),
+Object::POOF::App(3),
+Object::POOF::User(3)
+
+=head1 AUTHOR
+
+Copyright 2005 Mark Hedges E<lt>hedges@ucsd.eduE<gt>, CPAN: MARKLE
+
+=head1 LICENSE
+
+Released under the standard Perl license (GPL/Artistic).
+
+=cut
+
+

@@ -11,9 +11,11 @@ Object::POOF::App - Perl Object-Oriented Framework - Application Object
  sub init {
     my ($self,$p) = @_;
     
-    $self->{sess_table}    = "MyApp_Sessions";
-    $self->{sess_dbuname}  = "myapp";
-    $self->{sess_dbpasswd} = "dbpassword_string";
+    $self->{sess_table}    = "sessions";
+
+	# note to self... shouldn't this be set up in DB object?
+	#
+	# THIS DOCUMENTATION NEEDS UPDATING
 
     # this calls Object::POOF::App::Web->init()
     # or Object::POOF::App::Term->init() automagically

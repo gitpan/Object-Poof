@@ -31,6 +31,13 @@ sub init {
 # detainting routines, etc.
 
 
+sub docroot {
+	my ($self) = shift;
+	unless ($self->{docroot}) {
+		$self->{docroot} = $ENV{DOCUMENT_ROOT};
+	}
+	return $self->{docroot};
+}
 
 
 

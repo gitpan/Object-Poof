@@ -38,7 +38,7 @@ sub app_init {
 
 	#$self->{r} = Apache->request;
 
-	my ($pack,$file,$line) = caller;
+	#my ($pack,$file,$line) = caller;
 	#warn __PACKAGE__."->init, my r is ".$self->{r}."\n";
 	#warn __PACKAGE__." caller package  = $pack\n";
 	#warn __PACKAGE__." caller filename = $file\n";
@@ -64,7 +64,7 @@ sub app_init {
 
 	$self->{s} = Object::POOF::App::Web::Session->new( 
 										r => $self->{r}, 
-													 c => $self->{c},
+										c => $self->{c},
 										sess_table => $self->{sess_table},
 										sess_dbuname => $self->{sess_dbuname},
 										sess_dbpasswd => $self->{sess_dbpasswd}
@@ -80,40 +80,93 @@ sub app_init {
 sub funk_setup {
 	my ($self,$p) = @_;
 
-	$self->{funk_name} 	= (	(defined $self->{q}->param('funk'))
-							&& (length($self->{q}->param('funk')) <= 64)
-				  			&& ($self->{q}->param('funk') =~ /^\w+$/) )
-						? $self->{q}->param('funk')
-						: "";
-	$self->{funk_name}	=~ s/\/+/::/g;
+	if ((defined $self->{q}->param('funk'))
+		and ($self->{q}->param('funk') =~ /::Funk/)) {
+		$self->{funklib} = $self->{q}->param('funk');
+	} elsif (not defined ($self->{q}->param('funk'))) {
+		
+		# parse up the directory called to extrapolate the funk name
+		# i.e. /admin/signup becomes funk MyApp::Admin::Funk::Signup
+		my @uri = split /\//, $ENV{REQUEST_URI};
+		shift @uri; # discard blank first element
 
-	$self->{funk_num} 	= (	(defined $self->{q}->param('funk_num'))
-							&& ($self->{q}->param('funk_num') !~ /\D/) )
-						? $self->{q}->param('funk_num')
-						: "";
 
-	$self->{funklib} 	= $self->{baseclass};
+		my $baseclass = $self->{baseclass};
+		warn "baseclass is $baseclass\n";
+		my $funklib	 = $baseclass;
+		warn "uri is '@uri'\n";
+		my $firstpath = shift @uri;
+		if ($firstpath) {
 
-	$self->{funklib}	.= (defined $self->{funk_dir})
-						? '::'.$self->{funk_dir}
-						: '';
+			# if firstpath protected by htpassword,
+			foreach (@{$self->{protected_paths}}) {
+				if (/^$firstpath$/i) {
+					# forward directly through to correct uc/lc URL:
+					
+				}
+
+			}
+			$funklib	.= "::".$firstpath;
+			warn "funklib is now $funklib\n";
+		}
+		$funklib	.= "::Funk";
+		warn "funklib is now $funklib\n";
+		if (@uri == 0) {
+			$funklib .= "::Default";
+			warn "funklib is now $funklib\n";
+		} else {
+			while (@uri > 0) {
+				$funklib .= "::".ucfirst(lc(shift @uri));
+				warn "funklib is now $funklib\n";
+			}
+		}
+		# detaint the string:
+		if ($funklib =~ /^([\:\w]+)$/) {
+			$funklib = $1;
+		} else {
+			$funklib = "$baseclass"."::Funk::Default";
+		}
+		$self->{funklib} = $funklib;
+
+
+	} else {
+
+		$self->{funk_name} 	= (	(defined $self->{q}->param('funk'))
+								&& (length($self->{q}->param('funk')) <= 64)
+				  				&& ($self->{q}->param('funk') =~ /^\w+$/) )
+							? $self->{q}->param('funk')
+							: "";
+		$self->{funk_name}	=~ s/\/+/::/g;
 	
-	$self->{funklib} .= "::Funk";
-	$self->{funklib} .= ($self->{funk_name}) 
-					  	? "::".$self->{funk_name} 	
-						: "::Default";
-	$self->{funklib} .= ($self->{funk_num})	 
-						? "::".$self->{funk_num}	
-						: "";
+		$self->{funk_num} 	= (	(defined $self->{q}->param('funk_num'))
+								&& ($self->{q}->param('funk_num') !~ /\D/) )
+							? $self->{q}->param('funk_num')
+							: "";
+	
+		$self->{funklib} 	= $self->{baseclass};
+	
+		$self->{funklib}	.= (defined $self->{funk_dir})
+							? '::'.$self->{funk_dir}
+							: '';
+	
+		$self->{funklib} .= "::Funk";
+		$self->{funklib} .= ($self->{funk_name}) 
+					  		? "::".$self->{funk_name} 	
+							: "::Default";
+		$self->{funklib} .= ($self->{funk_num})	 
+							? "::".$self->{funk_num}	
+							: "";
+	}
 
 	warn "self->{funklib} is '".$self->{funklib}."' in funk_setup()\n";
 
-	eval("use ".$self->{funklib});
+	eval("require $self->{funklib}");
 
 	# how do you like them apples?
 	$self->{funk} = $self->{funklib}->new( 
 						db 			=> $self->{db},
 						baseclass 	=> $self->{baseclass},
+						app			=> $self,
 					);
 	#warn "self->{funk} is now '".$self->{funk}."' in funk_setup()\n";
 	return;
@@ -127,49 +180,11 @@ sub run {
 	# now send headers and print
 	$self->{r}->content_type("text/html");
 	$self->{r}->send_http_header;
+
 	$self->{r}->print( $self->{funk}->funk );
-	#$self->{r}->print($self->output_header);
-	#$self->{r}->print($self->output_header 
-	                #. $self->{funk}->funk 
-					#. $self->output_footer   );
-	#$self->{r}->print("testing 1 2 3 testing\n");
 	return;
 }
 
-sub bogusfunk {
-	my ($self,$p) = @_;
-	my $q = $self->{q} or return undef;  # tired of typing
-
-	my $funk = $self->{funk_name};
-
-	my $html = $self->bar;
-
-	FUNK: {
-
-		($funk eq 'info') and do {
-	 $html .= $self->page_info;
-	 last FUNK;
-		};
-
-		($funk eq 'login') and do {
-			$html .= $self->page_login;
-	 last FUNK;
-		};
-
-		#($funk eq 'qna') and do {
-			#$html .= $self->page_qna;
-			#last FUNK;
-		#};
-
-
-		do {
-			# default
-	 $html .= $self->page_index;
-		};
-	}
-
-	return $html;
-}
 
 
 

@@ -13,6 +13,16 @@ sub new {
 	my $proto = shift;
 	my $class = ref($proto) || $proto;
 	my $self = { @_ };
+
+	return undef unless ($self->{db});
+	if ($self->{where}) {
+		return Object::POOF::Data->getOneClass({ 	class	=> $class,
+													where	=> $self->{where},
+													db		=> $self->{db}	
+												});
+	}
+	
+	# if not selecting, construct a new one...
 	$self->{class} = $class;
 	bless $self,$class;
 	($self->init) or return undef;
@@ -39,8 +49,6 @@ Object::POOF - Perl Object-Oriented Framework
  
  sub init {
     my $self = shift;
-    $self->{table}      = "model";       # quick database table
-    $self->{table_info} = "model_info";  # suppl. info table
     $self->SUPER::init;                  # call parent init
     # other custom setup...
     return 1;
@@ -57,19 +65,25 @@ Object::POOF - Perl Object-Oriented Framework
  package main;
  require MyApp::Model;
  require MyApp::DB;  # see Object::POOF::DB;
- my $model = MyApp::Model->new(   id      => $id;
-                                  prop2   => "val2",
-                                  db      => $db   );
+ my $model = MyApp::Model->new(   id      	=> $id;
+                                  nondbprop => "nondbval",
+                                  db     	=> $db   );
  print $model->id."\n";
  print $model->data->{quick_dbfield1}."\n";
  print $model->{data}->{quick_dbfield2}."\n";    # cached data values
  print $model->data_info->{info_dbfield1}."\n";  # suppl. info data
+ $model->destroy;
  
+ $model = MyApp::Model->new(	db		=> $db,
+ 								where	=>	{ quick_dbfield1 => $val1,
+											  info_dbfield1  => $val2
+											}
+							);
+
  $model->{save}->{quick_dbfield1}       = "new_value1";
  $model->{save_info}->{info_dbfield1}   = "new_value2";
  $model->save;
  $model->commit;
- 
  $model->data;   # re-select and re-cache new data values
  
  # MyApp::DB object can be passed around as a shared transaction thread
@@ -79,6 +93,7 @@ Object::POOF - Perl Object-Oriented Framework
  $newmodel->{save}->{quick_dbfield1} = "new_value1";
  $newmodel->save;
  $newmodel->commit;   # or $newmodel->rollback;
+
  
 =head1 DESCRIPTION
 
@@ -86,6 +101,8 @@ Perl Object-Oriented Framework attempts to provide an easier way
 to construct and deal with objects that map to entries in a database.
 To define a new class of object, in the example MyApp::Model, simply
 create tables in the database named "model" and "model_info".
+The names of these tables must be the lower case of your package name.
+model_info is optional and used for less-quick data associated w/ object.
 
 Object::POOF and related classes require some conventions to be
 adhered to in order to reduce work and make object interfaces consistent.
@@ -117,6 +134,22 @@ find an instance of a given object based on field search criteria,
 or instantiate herds of objects from search criteria that can then
 be compared, crossed, ordered, etc.
 
+=head1 BUGS
+
+=item Rolling back newly created objects without saving
+
+The only disadvantage to rollback after creating a new object is
+that the database auto_increment id counter has incremented.
+(Constructing a new object does an insert to get an ID to work
+with in the database thread.)
+With a big system creating a lot of objects temporarily that
+won't end up being saved, this could cause the auto_increment
+counter could run out of space over time.
+I'm not sure how to get around that, except making ID fields
+bigints.
+
+=item MySQL is only supported database.
+
 =head1 SEE ALSO
 
 Object::POOF::Data(3),
@@ -128,6 +161,8 @@ Object::POOF::User(3)
 =head1 AUTHOR
 
 Copyright 2005 Mark Hedges E<lt>hedges@ucsd.eduE<gt>, CPAN: MARKLE
+
+=head1 LICENSE
 
 Released under the standard Perl license (GPL/Artistic).
 
