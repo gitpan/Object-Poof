@@ -1,9 +1,9 @@
-package TT::User;
+package Object::POOF::User;
 
 use strict;
 use Carp;
-require TT::DB;
-use TT::Data;
+require Object::POOF::DB;
+use Object::POOF::Data;
 
 sub new {
    my $proto = shift;
@@ -17,7 +17,7 @@ sub new {
 sub init {
    my ($self,$p) = @_;
 
-   $self->{db} = TT::DB->new() unless (defined $self->{db});
+   $self->{db} = Object::POOF::DB->new() unless (defined $self->{db});
 
    $self->{table}      = "users";
    $self->{table_info} = "users_info";
@@ -27,13 +27,13 @@ sub init {
    if ((defined $self->{org}) || (defined $self->{org_id})) {
       # check to make sure user doesn't already have a primary org
       if ($self->data->{org_id}) {
-	 require TT::Org;
-         $self->{org} = TT::Org->new( id => $self->{data}->{org_id}, 
+	 require Object::POOF::Org;
+         $self->{org} = Object::POOF::Org->new( id => $self->{data}->{org_id}, 
 	                               db => $self->{db}               );
          # and what, throw an exception?  that might cause total rollback.
       } elsif ((defined $self->{org_id}) and (not defined $self->{org})) {
-	 require TT::Org;
-         $self->{org} = TT::Org->new( id => $self->{data}->{org_id}, 
+	 require Object::POOF::Org;
+         $self->{org} = Object::POOF::Org->new( id => $self->{data}->{org_id}, 
 	                               db => $self->{db}               );
       }
    } # otherwise I guess the user gets no org
@@ -48,7 +48,7 @@ sub find_user_by_email {
 
    my ($db) = (defined $p->{db})
             ? $p->{db}
-	    : TT::DB->new();
+	    : Object::POOF::DB->new();
    my $org  = (defined $p->{org})
             ? $p->{org}
 	    : undef;
@@ -95,7 +95,7 @@ sub find_user_by_email {
    ($id) = $db->dbh->selectrow_array($sql);
 
    if (defined $id) {
-      return TT::User->new( id => $id, db => $db );
+      return Object::POOF::User->new( id => $id, db => $db );
    } else {
       return undef;
    }
@@ -107,10 +107,10 @@ sub add_to_group {
    my ($self,$p) = @_;
 
    # make sure group exists 
-   require TT::Group;
+   require Object::POOF::Group;  
    my $group = undef;
    if (defined $p->{name}) {
-      $group = TT::Group->find({ name => $p->{name}, 
+      $group = Object::POOF::Group->find({ name => $p->{name}, 
                                  org  => $self->org,
 				 db   => $db         });
    }

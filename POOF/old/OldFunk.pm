@@ -1,9 +1,9 @@
-package POOF::Funk;
+package Object::POOF::Funk;
 
 use strict;
 use Carp;
-require POOF::DB;
-use POOF::Data;
+require Object::POOF::DB;
+use Object::POOF::Data;
 
 sub new {
    my $proto = shift;
@@ -88,7 +88,7 @@ sub group_auth {
 #  these notes are old....
 # 
 # if a data shepherd passed a "root" as a funk, it populates
-# a tree of funks in dimensions it finds.  because POOF::Data knows
+# a tree of funks in dimensions it finds.  because Object::POOF::Data knows
 # that Funks do not have a sub_id field, they are not a double-linked
 # list that should be using only prev_id and next_id, and they are
 # not a binary tree using left_id and right_id, or a double-linked

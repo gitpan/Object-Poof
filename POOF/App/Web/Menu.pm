@@ -1,10 +1,10 @@
-package POOF::App::Web::Menu;
+package Object::POOF::App::Web::Menu;
 
 use strict;
 use Carp;
-require POOF::DB;
-require POOF::Funk;
-require POOF::Data::Shepherd;
+require Object::POOF::DB;
+require Object::POOF::Funk;
+require Object::POOF::Data::Shepherd;
 
 
 # this is supposed to call Funk's class method for finding Root Funks,
@@ -30,9 +30,9 @@ sub init {
    return undef unless ($self->{db});
    return undef unless ref $self->{roots};
    foreach (@{$self->{roots}}) {
-      my $root_funk = POOF::Funk->new( funk => lc($_), 
+      my $root_funk = Object::POOF::Funk->new( funk => lc($_), 
                                         db   => $self->{db} );
-      my $shep = POOF::Data::Shepherd->new( herds => $root_funk, 
+      my $shep = Object::POOF::Data::Shepherd->new( herds => $root_funk, 
                                              db    => $self->{db} );
       $shep->breed;
       push @{$self->{sheps}}, $shep;

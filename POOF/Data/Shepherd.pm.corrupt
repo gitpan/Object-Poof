@@ -1,0 +1,142 @@
+package Object::POOF::Data::Shepherd;
+
+use strict;
+require Object::POOF::DB;
+use Object::POOF::Data;  # should qw this, since Shepherd doesn't have a table.
+                 # but we need routines like dbh, etc.
+
+# Object::POOF::Data::Shepherd->new( herds => $obj | ref $obj );
+# if passed herd as $obj, saves ref as {herds} and makes {root} = $obj.
+# then if class is a tree, breed() uses {root}.
+# if class is a list, line() populates the list. 
+# if class is some other structure, populate some other way, etc.
+
+sub new {
+   my $proto = shift;
+   my $class = ref($proto) || $proto;
+   my $self = { @_ };
+   bless $self,$class;
+   ($self->init) or return undef;
+   return $self;
+}
+
+
+sub init {
+   my $self = shift;
+   return undef unless $self->{db};
+   if (ref $self->{herds}) {
+      # if {herds} is an object, assume it's a root of some structure.
+      $self->{root}  = $self->{herds};
+      $self->{herds} = ref $self->{herds};
+   } 
+   # else {herds} is a class (ref $someobj), so just use it.
+   return undef unless ($self->{herds});
+
+   my $table = $self->{table} = $self->table($self->{herds});
+   my $table_info = $table."_info";
+
+   if ($self->{db}->fields->{table_fields}->{$table_info}) {
+      $self->{table_info} = $table_info;
+   }
+   return 1;
+}
+
+
+#sub callOneToOne {
+#   # only an instance method.
+#   # $relation is a blessed object of some class.
+#   my ($self,$relation) = @_;
+#
+#   my $relation_tab = Object::POOF::Data::table( ref $relation );
+#   
+#   return undef unless grep(/^$relation_tab$/,
+#                            @{$self->{db}->fields->{tables_list}});
+#   my $reltab1 = $self->{table}."_".$p->{table};
+#   my $reltab2 = $p->{table}."_".$self->{table};
+#   my $reltab;
+#   if grep(/^$reltab1$/,@{$self->{db}->fields->{tables_list}}) {
+#      $reltab = $reltab1;
+#   } elsif grep(/^$reltab2$/,@{$self->{db}->fields->{tables_list}}) {
+#      $reltab = $reltab2;
+#   } else {
+#      return undef;
+#   }
+#   my $sql = qq#
+#      select #.$relation_tab.qq#_id from $reltab 
+#      where #.$self->table.qq#_id=#.$self->id.qq#
+#   #;
+#   my ($related_id) = $self->dbh->fetchrow_array($sql);
+#   return $related_id;
+#}
+
+
+sub release {
+   my ($self,$obj) = @_;
+   # if obj has a structure depending on it, i.e. if it is the head
+   # of a list flock, or it is the root of a tree flock, should the
+   # flock be released as well?  I'm going to assume so right now.
+   $self->release_root($obj);  # interestingly, this also calls release_head
+   $obj->destroy;
+   return;
+}
+
+sub release_all {
+   my ($self,$p) = @_;
+   # release all flocks, those pointed to by root() or head()
+   $self->release_head;
+   $self->release_root;
+   return;
+}
+
+sub release_head {
+   # releases (destroys) whole flock pointed to by {head}, i.e. a list
+   my ($self,$p) = @_;
+   
+   my $leaf = ($p->{head}) ? $p->{head} : $self->{head};
+   return unless $leaf;
+   my $table = $leaf->table;
+   return unless ($self->{db}->fields->$table->{next_id});
+
+   while (my $next = $leaf->{next}) {
+      $leaf->destroy;
+      $leaf = $next;   # '$next' becomes the last pointer to the obj in loop
+   }
+   return;
+}
+
+sub release_root {
+   # releases (destroys) whole flock pointed to by {root}, i.e. a tree
+   # and any process lists stemming from any node
+
+   my ($self,$p) = @_;
+
+   my $root = ($p->{root}) ? $p->{root} : $self->{root};
+   return unless $root;
+   my $table = $root->table;
+   return unless ($self->{db}->fields->$table->{up_id});
+
+   # first, if $root has a {next}, it is also a stem process, so release that
+   if ($root->{next}) {
+      $self->release_head({ head => $root });
+   }
+
+   # now call recursively down the tree
+   foreach (@{$root->{down}}) {
+      $self->release_root({ root => $_ });
+   }
+
+   # while un-stacking recursive calls, destroy the object.
+   # calling function in stack should contain the last reference to it.
+   $root->destroy;
+   return;
+}
+
+sub sql_select {
+   my ($self,$p)  = @_;
+   my $p_where  = $p->{where};
+   my $p_what   = $p->{what};
+   my $table      = $self->{table};
+   my $table_info = $self->{table_info};
+   my $fields     = $self->{db}->fields;  # DB::Fields object
+   
+   # her

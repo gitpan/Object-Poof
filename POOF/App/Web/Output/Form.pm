@@ -1,4 +1,4 @@
-package POOF::App::Web::Output::Form;
+package Object::POOF::App::Web::Output::Form;
 
 # form tools.  Inherited by App.pm
 
