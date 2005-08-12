@@ -1,25 +1,23 @@
-package Object::POOF::App::Web::Session;
-
-		# it would be nice if these values didn't have to be hardcoded
+package Object::POOF::App::Session;
 
 use strict;
 use warnings;
-use Carp;
 
-use Apache::Session ();
-use Apache::Session::MySQL;
-use Apache::Cookie;
+require Apache::Cookie;
 
 sub new {
 	my ($proto) = shift;
 	my $class = ref($proto) || $proto;
 	my $self = { @_ };
 
-	# must pass ref to Apache->request obj
-	return undef unless (defined $self->{r}); 
+	$self->init or return undef;
 
 	bless $self,$class;
 	return $self;
+}
+
+sub init {
+	my $self
 }
 
 sub session {

@@ -6,7 +6,7 @@ package Object::POOF;
 
 use strict;
 use warnings;
-use Carp;
+
 use Object::POOF::Data;
 
 sub new {
@@ -15,14 +15,7 @@ sub new {
 	my $self = { @_ };
 
 	return undef unless ($self->{db});
-	if ($self->{where}) {
-		return Object::POOF::Data->getOneClass({ 	class	=> $class,
-													where	=> $self->{where},
-													db		=> $self->{db}	
-												});
-	}
-	
-	# if not selecting, construct a new one...
+
 	$self->{class} = $class;
 	bless $self,$class;
 	($self->init) or return undef;
@@ -31,8 +24,32 @@ sub new {
 
 sub init {
 	my $self = shift;
+
+	if (($self->{id}) or ($self->{where})) {
+		my $where = undef;
+		if ($self->{id}) {
+			$where = { id => $self->{id} };
+		} else {
+			$where = $self->{where};
+		}
+
+		if ($self->{follow}) {
+			
+		}
+		
+#		require Object::POOF::SQL::Select;
+#
+#		my $select = Object::POOF::SQL::Select->new(
+#			where	=> $where,
+#			what	=> ($self->{what}) ? $self->{what} : 'all',
+#		);
+
+	} 
+	# else don't do anything... the call to save will autogen id
+
 	return 1;
 }
+
 
 
 1;

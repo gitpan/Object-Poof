@@ -1,5 +1,4 @@
 package Object::POOF::Data;
-use Carp;
 use strict;
 use warnings;
 
@@ -8,135 +7,106 @@ BEGIN {
 	our ($VERSION,@ISA,@EXPORT,@EXPORT_OK,%EXPORT_TAGS);
 	$VERSION = 1.00;
 	@ISA = qw(Exporter);
-	@EXPORT = qw( 	&save &dbh &data &data_info 
-					&id &find1to1 &table &table_info
-					&getOne &getOneClass
-				);
+	@EXPORT = qw( 	
+		&dbh 
+		&id &save &load
+		&base &table &table_info
+	);
 	%EXPORT_TAGS = ( );
 	@EXPORT_OK = qw(); 
 }
 our @EXPORT_OK;
-
-sub getOneClass {
-	# the class-method version of getOne... or you can fake 'self' yourself
-	return Object::POOF::Data::getOne("bonk", @_); # tricksy
-}
-sub getOne {
-	my ($self,$p) = @_;
-	#warn __PACKAGE__."->getOne start... p is:\n";
-	#while (my ($k,$v) = each %$p) {
-		#warn "\t$k\t$v\n";
-	#}
-	return undef unless (($p->{class}) && ($p->{where}));
-	#warn __PACKAGE__."->getOne okay...\n";
-	my $db = ($p->{db}) ? $p->{db} : ($self->{db}) ? $self->{db} : undef;
-	return undef unless ($db);
-	#warn __PACKAGE__."->getOne moving on...\n";
-	# easiest to create a temporary shepherd i guess... sheesh
-	require Object::POOF::Data::Shepherd;
-	my $shep = Object::POOF::Data::Shepherd->new( 	db 		=> $db,
-													herds 	=> $p->{class} );
-	#warn __PACKAGE__."->getOne: shep is $shep\n";
-	#warn __PACKAGE__."->getOne: where is $p->{where}\n";
-	#while (my ($k,$v) = each %{$p->{where}}) {
-		#warn "$k\t=\t$v\n";
-	#}
-	return $shep->callOne({ where => $p->{where} });
-}
-
 
 # these are data routines that are inherited by other objects.
 # they deal with the object's main table, which must be named the
 # lowercase version of the class name, i.e. if class Foo::Bar::Baz,
 # the tables in the db must be 'baz' and 'baz_info'.
 
-sub save {
-	# data saving.  
-	#	 $msg->{save}->{subject} = $subject;
-	#	 $msg->{save}->{from_email} = $from_email;
-	#	 $msg->save;
-	#	 $msg->commit;
-	my ($self,$p) = @_;
-
-	foreach (qw(save save_info)) {
-		next unless (defined $self->{$_}); # data to save
-		my $table = (/info/) ? $self->table : $self->table_info;
-		next unless ($table); # somewhere to save it
-		
-		my $sql = qq#
-			update $table set
-		#;
-		foreach my $field (keys %{$self->{$_}}) {
-	
-			my $field_desc = $self->{db}->{tables}->{$table}->{$field};
-			next unless ($field_desc); # field doesn't exist in table
-
-			if ($field_desc->{type_datetime}) {
-				# if the field is a date or time type, any value means to
-				# set the field to now()
-	 			$sql .= " $field = now(), " if ($self->{save}->{$field});
-			}
-			elsif ($field_desc->{type_string}) {
-				# quote the string value
-	 			$sql .= " $field = "
-						.$self->dbh->quote($self->{save}->{$field})
-						.", ";
-			}
-			# else it is numeric... check?
-		}
-		#chop the last comma... maybe there is a way to wrap the above in map?
-		$sql =~ s/,\s*$/ /;
-		$sql .= qq# where id = #.$self->id;
-		$self->dbh->do($sql);
+sub save : locked method {
+	my $self = shift;
+	my $tmi = $self->{db}->{tables}->{ $self->table };
+	my $tii = undef;
+	if ($self->table_info) {
+		$tii = $self->{db}->{tables}->{ $self->{table_info} };
 	}
-
-	return 1;  # assuming it went okay?
+	while (my ($fld,$val) = each %{$self->{save}}) {
+	}
 }
 
+sub field_table : method {
+	my ($self,$fld) = @_;
+	return undef unless (($fld) and (defined $self->{db}));
+	return $self->{table} if (exists $self->{db}->{tables}->{ $self->table }->{info}->{$fld});
+	if	(	($self->table_info) 
+		and	(exists $self->{db}->{tables}->{ $self->{table_info} }->{info}->{$fld})
+		) {
+		return $self->{table_info} 
+	} else {
+		return undef;
+	}
+}
 
-sub dbh {
+sub dbh : locked method {
 	# for ease of use, returns object's POOF::DB->dbh thread
 	# now caller app must initialize DB object(s) and pass around threads
-	my ($self,$p) = @_;
+	my $self = shift;
 	return undef unless (defined $self->{db});
-	unless (defined $self->{dbh}) {
-		$self->{dbh} = $self->{db}->dbh;
+	return $self->{db}->dbh;
+}
+
+sub load : method {
+	my ($self,$aref) = shift;
+	return undef unless ((defined $self->{db}) and ($self->{id}));
+	my ($tmf,$tif) = (undef,undef);  # tmf = table main fields, tif = table info fields
+	if (not ref $aref and $aref eq 'all') {
+		$tmf = [ grep(!/^id$/, $self->{db}->{tables}->{ $self->table }->{fields}) ];
+		$tif =	($self->table_info)
+			?	[ grep(!/^id$/, $self->{db}->{tables}->{ $self->{table_info} }->{fields}) ]
+			:	[ ];
+	} else {
+		return undef unless ref $aref eq 'ARRAY';
+		$tmf = []; 
+		$tif = [];
+		for my $fld (@$aref) {
+			next if (/^id$/);
+			if ($self->field_table($fld) eq $self->table) {
+				push @$tmf, $fld;
+			} 
+			elsif (	($self->table_info)
+				and	($self->field_table($fld) eq $self->table_info)
+				) {
+				push @$tif, $fld;
+			}
+		}
 	}
-	return $self->{dbh};
+	return undef unless ((@$tmf) or (@$tif));
+	my $sql = qq(
+		SELECT
+	)
+	.	join(" ,\n", map { "$self->{table}.$_" } @$tmf);
+
+	$sql .= " ,\n".join(" ,\n", map { "$self->{table_info}.$_" } @$tif) if (@$tif);
+
+	$sql .= qq(
+		FROM $self->{table}
+	);
+	$sql .= qq(
+		, $self->{table_info}
+	) if ($self->{table_info});
+
+	$sql .= qq(
+		WHERE id = $self->{id}
+	);
+
+	my $data = $self->dbh->selectrow_hashref($sql);
+
+	#@{$self}{keys %$data} = @{$self->{data}}{keys %$data} = values %$data;
+	# maybe i don't really need the {data} hash at all, let's see.
+	@{$self}{keys %$data} = values %$data;
 }
 
-
-sub data {
-	# data retrieval.  refer to table contents like 
-	# self->data->{user_id}	 ... to select first time or reload
-	# self->{data}->{user_id}  ... to use cached data
-	my ($self,$p) = @_;
-	$self->{data} = {};
-	my $sql = qq# select * from #.$self->table.qq# where id = #.$self->id;
-	$self->{data} = $self->dbh->selectrow_hashref($sql);
-	return $self->{data};
-}
-
-sub data_info {
-	# like data(), only used if object has supplementary obj_info field
-	my ($self,$p) = @_;
-
-	return undef unless (defined $self->table_info);
-	$self->{data_info} = {};
-	my $sql = qq# 
-		select * 
-		from #.$self->table_info.qq# 
-		where id = #.$self->id.qq#
-	#;
-
-	$self->{data_info} = $self->dbh->selectrow_hashref($sql);
-	return $self->{data_info};
-
-}
-
-
-sub id {
-	my ($self,$p) = @_;
+sub id : locked method {
+	my $self = shift;
 	unless (defined $self->{id}) {
 		my $sql = qq#
 			insert into #.$self->table.qq# (id) values (0)
@@ -172,12 +142,18 @@ sub table {
 	my $class;
 	if (ref $param) {
 		$self = $param;
-		$class = shift || ref $param;
+		unless ($self->{table}) {
+			($class = shift || ref $param) =~ /^\w+::(.*)$/;
+			(my $table = lc($1)) =~ s/:/_/g;
+			$self->{table} = $table;
+		}
+		return $self->{table};
+
 	} else {
-		$class = $param;
+		($class = $param) =~ /^\w+::(.*)$/;
+		(my $table = lc($1)) =~ s/:/_/g;
+		return $table;
 	}
-	my @split = split /::/, $class;
-	return lc(pop @split);
 }
 
 sub table_info {
@@ -189,66 +165,36 @@ sub table_info {
 	if (ref $param) {
 		$self = $param;
 		$class = shift || ref $param;
+		unless (exists $self->{table_info}) {
+			($class = shift || ref $param) =~ /^\w+::(.*)$/;
+			(my $table_info = lc($1).'_info') =~ s/:/_/g;
+			if (exists $self->{db}->{tables}->{$table_info}) {
+				$self->{table_info} = $table_info;
+			} else {
+				$self->{table_info} = undef;
+			}
+		}
+		return $self->{table_info};
 	} else {
-		$class = $param;
+		# for class method, we just don't know if it exists
+		# because method has no access to DB object, so 
+		# caller is responsible for figuring that out, unless
+		# you pass a reference to the db!
+		($class = $param) =~ /^\w+::(.*)$/;
+		(my $table_info = lc($1).'_info') =~ s/:/_/g;
+		if (my $db = shift) {
+			$table_info = undef unless exists $db->{tables}->{$table_info};
+		}
+		return $table_info;
 	}
-	my @split = split /::/, $class;
-	my $table_info = lc(pop @split)."_info";
-	return undef 			# for class method, we just don't know if it exists
-		if (($self->{db}) 	# because method has no access to DB object
-		and not (grep /^$table_info$/, @{$self->{db}->{tables_list}}));
-	return $table_info;
+}
+
+sub base : method {
+	my $self = shift;
+	$self->{class} =~ /^(\w+)::/;
+	return $1;
 }
 
 
-
-# findOneToOne, FindOneToMany, etc. should be in Data::Shepherd.
-# up, down, left, right, they are all things Shepherd should do.
-
-
-#---------------------------------------------------------------------
-
-
-
-
 1;
-
-
-
-
-=head1 NAME
-
-Object::POOF::Data - Importable class and instance methods for
-POOF: Perl Object Oriented Framework.
-
-=head1 SYNOPSIS
-
-All objects created inheriting Object::POOF or specialized classes
-like Object::POOF::User already get all these routines.  To get them
-as class methods, do:
-
-    use Object::POOF::Data qw(getOneClass dbh);
-
-Or something like that.
-
-=head1 DESCRIPTION
-
-=head1 SEE ALSO
-
-Object::POOF(3),
-Object::POOF::Data::Shepherd(3),
-Object::POOF::DB(3),
-Object::POOF::App(3),
-Object::POOF::User(3)
-
-=head1 AUTHOR
-
-Copyright 2005 Mark Hedges E<lt>hedges@ucsd.eduE<gt>, CPAN: MARKLE
-
-=head1 LICENSE
-
-Released under the standard Perl license (GPL/Artistic).
-
-=cut
-
 

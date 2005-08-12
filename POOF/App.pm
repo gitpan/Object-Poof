@@ -1,128 +1,184 @@
-=head1 NAME
-
-Object::POOF::App - Perl Object-Oriented Framework - Application Object
-
-=head1 SYNOPSIS
-
- Package MyApp::App;
-
- @ISA = qw(Object::POOF::App);
- 
- sub init {
-    my ($self,$p) = @_;
-    
-    $self->{sess_table}    = "sessions";
-
-	# note to self... shouldn't this be set up in DB object?
-	#
-	# THIS DOCUMENTATION NEEDS UPDATING
-
-    # this calls Object::POOF::App::Web->init()
-    # or Object::POOF::App::Term->init() automagically
-    # because Object::POOF::App->new calls the right new()
-    #
-    # well, that's the theory, but Term apps aren't implemented
-   
-    my $status = $self->SUPER::init;
-    if (defined $status) {
-       my $croak = __PACKAGE__
-                 ."->init(): SUPER::init status: $status\n";
-       croak $croak;
-    } else {
-       return 1;
-    }
- }
-
- sub run {
-    my ($self,$p) = @_;
-    $self->SUPER::run;
- }
-
- # ... in main script, current example is just for www app:
- require MyApp::DB;
- require MyApp::App;
- my $db  = MyApp::DB->new;  # inherits from Object::POOF::DB
- my $app = MyApp::App->new( db => $db );
- $app->run;
-
-=head1 DESCRIPTION
-
-Object::POOF::App provides a framework for an object-oriented application.
-Future plans include a terminal interface, but right now it only supports
-an Apache mod_perl application.  Some libraries are required, like
-Apache::Session.
-
-To work, user must define at least one Funk (function) library, MyApp::Funk.
-This is the default function.  See Object::POOF::Funk(3).  
-
-=cut
-
 package Object::POOF::App;
-
-our @ISA = qw( Object::POOF ); 
-
 use strict;
 use warnings;
-use Carp;
-#use Object::POOF::Data;
 
-# override general Object::POOF->new().
-# that begs the question of why we inherit from Object::POOF at all,
-# but in the future it may be nice to get the data routines, etc.
-# if we store application default values in the database under an 'app'
-# or 'app_info' table and create methods for the admin to change them.
+#$Apache::Registry::Debug = 4;
+use Apache::Constants qw(:common);
+use Apache;
+
+require Object::POOF::App::Session;
 
 sub new {
-    my $proto = shift;
-    my $class = ref($proto) || $proto;
+	my ($proto) = shift;
+	my $class = ref($proto) || $proto;
+	my $self = { @_ };
+	$self->{class} = $class;
+	$self->{db} = (defined $self->{db}) 
+					? $self->{db}
+			 : undef;
+	#warn __PACKAGE__."->new(), db is ".$self->{db}."\n";
+	return undef unless (defined $self->{db});
 
-	my $self = {};  # reset self hash
+	bless $self,$class;
 
-	if ($ENV{SERVER_NAME}) {
-		# assume this is an Object::POOF::App::Web
-		use Object::POOF::App::Web;
-		# won't work unless @_ includes DB object,
-		# i.e. my $app = MyApp::App->new( db => $db );
-		push @ISA, "Object::POOF::App::Web";
-		$self = Object::POOF::App::Web->new( @_ );
-		return undef unless ($self);
-	} else {
-		# use a Object::POOF::App::Term interface... unimplemented
-		# or Object::POOF::App:Ncurses... or My::App::Ncurses, or something
-		return undef;  # just doesn't work at this point
-	}
+	return $self;
+}
 
-	my $temp;
-	($self->{baseclass},$temp) = ($class =~ /^(.*)(::App)$/);
-    $self->{class} = $class;
-    bless $self,$class;
 
-	my ($pack,$file,$line) = caller;
+
+sub app_init {
+	my ($self,$p) = @_;
+
+	#$self->{r} = Apache->request;
+
+	#my ($pack,$file,$line) = caller;
+	#warn __PACKAGE__."->init, my r is ".$self->{r}."\n";
 	#warn __PACKAGE__." caller package  = $pack\n";
 	#warn __PACKAGE__." caller filename = $file\n";
 	#warn __PACKAGE__." caller line     = $line\n";
 
-    ($self->init) or return undef;  # this is the MyApp setup
+	$self->{domain} = $ENV{SERVER_NAME};
 
-	# this is ::Web->app_init etc.:
-	# it works opposite, because in case of ::Web, returns apache error code
-	($self->app_init) and return undef;	
-	return $self;
+	# get the incoming cookies
+	$self->{c} = Apache::Cookie->fetch; 
+	my ($cookie_warn) = (defined $self->{c}) ? $self->{c} : 'undef';
+	#warn "init: self->{c} is $cookie_warn\n";
+
+	# create an apache request object to get form variables
+	#$self->{q} = Apache::Request->new($self->{r});  # global from handler
+	my $status = $self->{q}->parse;
+	unless (($status eq 'OK') || (!$status)) {
+		$self->{q}->custom_response($status, 
+									$self->{q}->notes("error-notes"));
+		warn __PACKAGE__."->init(): bad apache parse status: $status,";
+		warn "error-notes: ".$self->{q}->notes("error-notes");
+		return $status;
+	}
+
+	$self->{s} = Object::POOF::App::Web::Session->new( 
+										r => $self->{r}, 
+										c => $self->{c},
+										sess_table => $self->{sess_table},
+										sess_dbuname => $self->{sess_dbuname},
+										sess_dbpasswd => $self->{sess_dbpasswd}
+										);
+	return "could not create Object::POOF::App::Web::Session object.\n" 
+		unless (defined $self->{s});
+
+	$self->{url} = $ENV{SCRIPT_NAME};
+
+	return undef;
 }
 
+sub funk_setup {
+	my ($self,$p) = @_;
+
+	if ((defined $self->{q}->param('funk'))
+		and ($self->{q}->param('funk') =~ /::Funk/)) {
+		$self->{funklib} = $self->{q}->param('funk');
+	} elsif (not defined ($self->{q}->param('funk'))) {
+		
+		# parse up the directory called to extrapolate the funk name
+		# i.e. /admin/signup becomes funk MyApp::Admin::Funk::Signup
+		my @uri = split /\//, $ENV{REQUEST_URI};
+		shift @uri; # discard blank first element
+
+
+		my $baseclass = $self->{baseclass};
+		warn "baseclass is $baseclass\n";
+		my $funklib	 = $baseclass;
+		warn "uri is '@uri'\n";
+		my $firstpath = shift @uri;
+		if ($firstpath) {
+
+			# if firstpath protected by htpassword,
+			foreach (@{$self->{protected_paths}}) {
+				if (/^$firstpath$/i) {
+					# forward directly through to correct uc/lc URL:
+					
+				}
+
+			}
+			$funklib	.= "::".$firstpath;
+			warn "funklib is now $funklib\n";
+		}
+		$funklib	.= "::Funk";
+		warn "funklib is now $funklib\n";
+		if (@uri == 0) {
+			$funklib .= "::Default";
+			warn "funklib is now $funklib\n";
+		} else {
+			while (@uri > 0) {
+				$funklib .= "::".ucfirst(lc(shift @uri));
+				warn "funklib is now $funklib\n";
+			}
+		}
+		# detaint the string:
+		if ($funklib =~ /^([\:\w]+)$/) {
+			$funklib = $1;
+		} else {
+			$funklib = "$baseclass"."::Funk::Default";
+		}
+		$self->{funklib} = $funklib;
+
+
+	} else {
+
+		$self->{funk_name} 	= (	(defined $self->{q}->param('funk'))
+								&& (length($self->{q}->param('funk')) <= 64)
+				  				&& ($self->{q}->param('funk') =~ /^\w+$/) )
+							? $self->{q}->param('funk')
+							: "";
+		$self->{funk_name}	=~ s/\/+/::/g;
+	
+		$self->{funk_num} 	= (	(defined $self->{q}->param('funk_num'))
+								&& ($self->{q}->param('funk_num') !~ /\D/) )
+							? $self->{q}->param('funk_num')
+							: "";
+	
+		$self->{funklib} 	= $self->{baseclass};
+	
+		$self->{funklib}	.= (defined $self->{funk_dir})
+							? '::'.$self->{funk_dir}
+							: '';
+	
+		$self->{funklib} .= "::Funk";
+		$self->{funklib} .= ($self->{funk_name}) 
+					  		? "::".$self->{funk_name} 	
+							: "::Default";
+		$self->{funklib} .= ($self->{funk_num})	 
+							? "::".$self->{funk_num}	
+							: "";
+	}
+
+	warn "self->{funklib} is '".$self->{funklib}."' in funk_setup()\n";
+
+	eval("require $self->{funklib}");
+
+	# how do you like them apples?
+	$self->{funk} = $self->{funklib}->new( 
+						db 			=> $self->{db},
+						baseclass 	=> $self->{baseclass},
+						app			=> $self,
+					);
+	#warn "self->{funk} is now '".$self->{funk}."' in funk_setup()\n";
+	return;
+}
+
+sub run {
+	my ($self,$p) = @_;
+	
+	$self->funk_setup;
+
+	# now send headers and print
+	$self->{r}->content_type("text/html");
+	$self->{r}->send_http_header;
+
+	$self->{r}->print( $self->{funk}->funk );
+	return;
+}
+
+
+
+
 1;
-
-=head1 SEE ALSO
-
-Object::POOF(3),
-Object::POOF::Funk(3),
-Object::POOF::App::Web(3),
-
-=head1 AUTHOR
-
-Copyright 2005 Mark Hedges E<lt>hedges@ucsd.eduE<gt>, CPAN: MARKLE
-
-Released under the standard Perl license (GPL/Artistic).
-
-=cut
-
