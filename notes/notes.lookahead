@@ -1,0 +1,156 @@
+> I'm thinking this is impossible... you would probably know.
+
+It's not. And I do. ;-)
+
+
+> Can an object method 'look ahead' to the next call?
+
+No.
+
+
+> if I do:
+> 
+> my $bar = Foo::Bar->new();
+> my $noz = $bar->biz()->baz()->boz()->noz();
+> 
+> say each method returns an object of Foo::Biz, Foo::Baz, etc.
+> and they all AUTOMETHOD these methods in some way... you get it...
+> 
+> Can Foo::Bar::biz() somehow look back at the full original call,
+> looking forward through the chain of -> operators to know the
+> whole sequence?
+
+No, it can't. Not unless you cheat. See below.
+
+
+> I want to avoid this:
+> 
+> $bar->call({
+>     < some big huge hash construct that makes SQL and populates >
+> });
+> my $noz = $bar->biz()->baz()->boz()->noz();
+> 
+> I would prefer it if the first method in the chain could know
+> to make the call internally and populate all the subsequent
+> objects with one SQL query, without having to spell it out at all.
+> 
+> Does that make sense conceptually?
+> 
+> Does it make sense for Perl?
+
+Yes. And Yes.
+
+The trick (i.e. cheat) is to have the method calls not actually call the 
+methods. Instead, you have each method return an object that *represents* the 
+accumulated method calls to that point. Then you have that object's destructor 
+do whatever "lookahead" and internal optimizations you want. For example:
+
+     package Lazy::Call;
+
+     sub new {
+         my ($class, $real_obj, @calls) = @_;
+         return bless { real_obj => $real_obj, calls => \@calls }, $class;
+     }
+
+     sub AUTOLOAD {
+         my ($self) = @_;
+         $AUTOLOAD =~ s/.*:://;
+         push @{$self->{calls}}, $AUTOLOAD;
+         return $self;
+     }
+
+     sub DESTROY {
+         my ($self) = @_;
+
+         # Replace this code with the actual look-ahead and processing...
+         use Data::Dumper;
+         print "Now able to lookahead on calls to: $self->{real_obj}\n",
+             "Calls were:\n",
+             Dumper $self->{calls};
+
+         return;
+     }
+
+     package Foo;
+
+     sub new {
+         my ($class) = @_;
+         return bless {}, $class;
+     }
+
+     sub bar {
+         my ($self) = @_;
+
+         return Lazy::Call->new($self, 'bar');
+     }
+
+     package main;
+
+     my $foo = Foo->new();
+
+     $foo->bar->baz->qux->etc;
+
+
+Hope this helps,
+
+Damian
+> Can the AUTOLOAD in your example know when it is getting the
+> last call in the sequence?  That's the point... to reach out and
+> get the value at the same time.  
+
+Sure. Try this:
+
+     package Lazy::Call;
+
+     sub new {
+         my ($class, $real_obj, @calls) = @_;
+         return bless { real_obj => $real_obj, calls => \@calls }, $class;
+     }
+
+     sub AUTOLOAD {
+         my ($self) = @_;
+         $AUTOLOAD =~ s/.*:://;
+         push @{$self->{calls}}, $AUTOLOAD;
+
+         use Want;
+         if (want 'OBJECT') {
+             return $self;
+         }
+
+         # Replace this code with the actual look-ahead and processing...
+         use Data::Dumper;
+         print "Now able to lookahead on calls to: $self->{real_obj}\n",
+             "Calls were:\n",
+             Dumper $self->{calls};
+
+         return 42;
+     }
+
+     sub DESTROY {
+     }
+
+
+     package Foo;
+
+     sub new {
+         my ($class) = @_;
+         return bless {}, $class;
+     }
+
+     sub bar {
+         my ($self) = @_;
+
+         return Lazy::Call->new($self, 'bar');
+     }
+
+
+     package main;
+
+     my $foo = Foo->new();
+
+     my $res = $foo->bar->baz->qux->etc;
+
+     print "$res\n";
+
+
+Damian

@@ -1,0 +1,39 @@
+Data::Types                     x
+Data::FormValidator
+Embperl::Form::Validate
+
+CGI::Ex::Validate **
+CGI::FormBuilder ** (does javascript, more advanced, hook in templates
+install template toolkit (TT2)
+Template::Plugin::Yaml
+
+Jscript dumping:
+Data::Javascript
+Data::JavaScript::Anon
+Data::JavaScript::LiteObject
+
+Jscript utils:
+Javascript::Menu::Full
+Javascript::Menu
+
+Javascript::Select::Chain **
+Javascript::Select::Chain::Nested
+
+
+for browsing all toons:
+HTML::PopupTreeSelect - collapsable
+CGI::Explorer  - no collapsing
+HTML::TreeStructured (embedded, collapsable) **
+
+
+
+OpenThought (the new 2.0 version www.openthought.net)
+
+Tree::Simple
+(and some way of serializing to database)
+Tree::Simple::VisitorFactory
+
+
+
+for ranch:
+libipc-sharedcache-perl

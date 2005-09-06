@@ -1,11 +1,74 @@
-Well, looks like the company I was working for will not
-release the work I did, so now that I am happily self-
-employed again I get to start over.  That's good though.
-I am going to focus on implementing a variety of relationships
-in the one-to-many class, such as containers, unconstrained
-multiple matches, constrained multiple matches, etc.  I get
-to do it all over the "right way" this time.  By the way,
-don't expect this version to work at all.  :-)
+Object::POOF version 0.0.6
 
-Mark Hedges
-2005-08-12
+THIS LIBRARY IS STILL HIGHLY EXPERIMENTAL AND SUBJECT TO CHANGE.
+IT IS NOT RECOMMENDED FOR USE.  YOU HAVE BEEN WARNED.
+
+I am always suspicious of companies trying to lay claim to 
+my work in contracts, so I am releasing this work so far
+because I start another job tomorrow.  Mark Hedges 2005-09-06.
+
+Object::POOF and sub-packages are an alpha-state development
+library intended to provide an OO entity interface for mod_perl.
+They will include a framework for developing form processing 
+functions under mod_perl custom handlers with de-tainting.
+The object interface uses a hash structure in the definitions
+of entity objects to define relationships of various types to
+other entity classes.  Then, a group of entities can be selected
+and auto-populated by specifying an arbitrary depth from a point
+of view using a similar hash parameter.  Data loading can be
+structured to increase efficiency.  New design goals include:
+
+  - PBP inside-out classes (and implementation of other PBP 
+    guidelines.)
+
+  - Extensive test-driven development (for a change).
+
+  - Proper exception hierarchies.
+
+  - Forget the pre-fetch call statement, trick -> operator
+    into looking ahead to gen/pop whole join statement if
+    you don't want to pre-call.  (Thanks for this insight 
+    to Damian Conway.)
+
+  - Thread-safe functionality under apache2 worker mpm.
+    (Can this be done with inside-out classes? Maybe by
+    making the Ranch (the object pool) a safe controller
+    of who gets what objects, cloning read-only objs, etc.)
+
+  - Object pool - Ranch will keep track of last-select timestamps, 
+    refresh timeouts, etc. similar to EJB entity bean pool and 
+    dole objects out to requests to connect to database threads
+    that belong to apache connections (like assigning entity
+    beans to database session beans.)
+
+  - Implementation using many CPAN classes, especially for
+    the web form processor wrapper, which can use any
+    generation or template system (I'm going to try
+    CGI::FormBuilder with Template Toolkit).  I wonder if
+    it will be able to work as an AJAX style processor.
+
+  - Eventually, a business framework including a ledger system.
+
+INSTALLATION
+
+To install this module, run the following commands:
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+(Maybe? I haven't checked.)
+
+
+DEPENDENCIES
+
+Lots...
+
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2005, Mark Hedges <hedges@ucsd.edu>
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
