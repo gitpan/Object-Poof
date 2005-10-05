@@ -3,7 +3,8 @@
 use strict;
 use warnings;
 
-use lib qw( ../lib ./testlib );
+use lib qw( ../lib .);
+#use blib;
 
 use Test::More qw( no_plan );
 

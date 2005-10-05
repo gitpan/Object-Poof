@@ -31,15 +31,6 @@ Readonly our %relatives => (
     #},
 );
 
-use Class::Std;
-{ 
-    sub BUILD {
-        my ($self, $ident, $arg_ref) = @_;
-        #$self->set_more_tables( \@more_tables  );
-        #$self->set_relatives(   \%relatives    );
-    }
-}
-
 # the following is only used by the test suite and should not
 # be included in your application:
 

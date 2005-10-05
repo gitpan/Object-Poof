@@ -4,7 +4,13 @@ use version; $VERSION = qv('0.0.1');
 
 use warnings;
 use strict;
-use Carp;
+use Carp qw( carp cluck confess croak );
+use English '-no_match_vars';
+use Exception::Class;
+use YAML;
+
+use Object::POOF::X;
+use Object::POOF::Constants;
 
 # Other recommended modules (uncomment to use):
 #  use IO::Prompt;
@@ -13,8 +19,156 @@ use Carp;
 #  use Perl6::Say;
 #  use Regexp::Autoflags;
 
-
 # Module implementation here
+
+use Class::Std;
+{
+    my %what_of         :ATTR( :get<what>                   );
+    my %update_pairs_of :ATTR( :get<update_pairs>           );
+    my %where_pairs_of  :ATTR( :get<where_pairs>            );
+    my %from_of         :ATTR( :get<from>                   );
+    my %joins_of        :ATTR( :get<joins>                  );
+    my %order_of        :ATTR( :get<order>                  );
+    
+    my %action_of       :ATTR( :get<action>   :set<action>  );
+
+    sub BUILD {
+        my ($self, $ident, $arg_href) = @_;
+
+        # check for bad params:
+        map {
+            if  (   exists $arg_href->{$_}
+                &&  ref $arg_href->{$_} ne 'ARRAY'
+                ) {
+                Object::POOF::X::SQL->throw(
+                    message =>  qq{BUILD: bad params: }
+                            .   Dump($arg_href)
+                            .   qq{---},
+                );
+            }
+        } qw( what update_pairs where_pairs from joins );
+
+        # if parms passed optionally set them:
+
+        if (exists $arg_href->{what}) {
+            map { $what_of{$ident}->{$_}         => 1 }
+                @{ $arg_href->{what} };
+        }
+        if (exists $arg_href->{update_pairs}) {
+            map { $update_pairs_of{$ident}->{$_} => 1 }
+                @{ $arg_href->{update_pairs} };
+        }
+        if (exists $arg_href->{where_pairs}) {
+            map { $where_pairs_of{$ident}->{$_} = 1 }
+                @{ $arg_href->{where_pairs} };
+        }
+        if (exists $arg_href->{from}) {
+            map { $from_of{$ident}->{$_}         => 1 }
+                @{ $arg_href->{from} };
+        }
+        if (exists $arg_href->{joins}) {
+            map { $joins_of{$ident}->{$_}        => 1 }
+                @{ $arg_href->{joins} };
+        }
+        if (exists $arg_href->{order}) {
+            map { $order_of{$ident}->{$_}        => 1 }
+                @{ $arg_href->{order} };
+        }
+        if (exists $arg_href->{action}) {
+            $action_of{$ident}          = $arg_href->{action};
+        }
+
+    }
+
+    sub add_update_pair {
+        my ($self, $pair) = @_;
+        croak("bad pair to add_update_pair") if (ref $pair);
+        $update_pairs_of{ ident($self) }->{$pair} = 1;
+        return;
+    }
+
+    sub add_what {
+        my ($self, $field) = @_;
+        $what_of{ ident($self) }->{$field} = 1;
+        return;
+    }
+
+    sub add_where_pair {
+        my ($self, $pair) = @_;
+        croak("bad pair to add_where_pair") if (ref $pair);
+        $where_pairs_of{ ident($self) }->{$pair} = 1;
+        return;
+    }
+
+    sub add_from {
+        my ($self, $from) = @_;
+        $from_of{ ident($self) }->{$from} = 1;
+        return;
+    }
+
+    sub add_join {
+        my ($self, $join) = @_;
+        $joins_of{ ident($self) }->{$join} = 1;
+        return;
+    }
+
+    sub add_order {
+        my ($self, $order) = @_;
+        $order_of{ ident($self) }->{$order} = 1;
+        return;
+    }
+
+    sub sql : STRINGIFY {
+        my ($self) = @_;
+        my $ident = ident($self);
+
+        my $sql = $action_of{$ident};
+
+        if (!$sql) {
+            Object::POOF::X::SQL->throw(
+                error => qq{no action set for this sql statement.},
+            );
+        }
+
+        my @where_pairs     = keys %{ $where_pairs_of{  $ident  } };
+        my @update_pairs    = keys %{ $update_pairs_of{ $ident  } };
+        my @what            = keys %{ $what_of{         $ident  } };
+        my @from            = keys %{ $from_of{         $ident  } };
+        my @joins           = keys %{ $joins_of{        $ident  } };
+        my @order           = keys %{ $order_of{        $ident  } };
+
+        # if they specify the wrong ones, their execute will bomb
+        # and they will know -- this package doesn't need to check.
+        # it's just a brainless aggregator.
+
+        $sql .= join(qq{ ,\n    }, @what);
+        $sql .= join(qq{ ,\n    }, @update_pairs);
+
+        if (scalar @from) {
+            $sql .= qq{\nFROM \n}
+                .   join(qq{ ,\n    }, @from);
+        }
+
+        if (scalar @joins) {
+            $sql .= join(qq{\n}, @joins);
+        }
+
+        if (scalar @where_pairs) {
+            $sql .= qq{\nWHERE \n      }
+                .   join(qq{\nAND   }, @where_pairs);
+        }
+
+        if (scalar @order) {
+            $sql .= qq{\nORDER BY \n}
+                .   join(qq{ ,\n    }, @order);
+        }
+
+        return $sql;
+    }
+}
+
+
+
 
 
 1; # Magic true value required at end of module

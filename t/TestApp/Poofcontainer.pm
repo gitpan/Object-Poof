@@ -1,27 +1,29 @@
-package TestApp::Poofthing;
+package TestApp::Poofcontainer;
 use strict;
 use warnings;
 use Carp;
-use Object::POOF::Constants;
 use Readonly;
 use base qw( Object::POOF );
 
 # other tables containing fields to be joined 
 # to 'poofcontainer' table by 'id' field when fields are requested:
-#Readonly our @more_tables => qw( );
+Readonly our @more_tables => qw( );
 Readonly our %relatives => (
     # self to other relationships (one to one):
     s2o => {
-        poofcontainer => {
-            class => 'TestApp::Poofcontainer',
+        poofone => {
+            class   => 'TestApp::Poofone',
         },
     },
 
     # self contains many - 
     # each foo has only one rel to each sCm entity
     # sCm entity must s2o back to this one if it should know.
-    #sCm => {
-    #},
+    sCm => {
+        poofthing => {
+            class   => 'TestApp::Poofthing',
+        },
+    },
 
     # self to many - possibly more than one rel to each s2m entity,
     # uniquely enforced by a field of the interim relational table
@@ -34,32 +36,25 @@ Readonly our %relatives => (
     #},
 );
 
-#use Class::Std;
-#{ 
-    #sub BUILD {
-        #my ($self, $ident, $arg_ref) = @_;
-        #$self->set_more_tables( \@more_tables  );
-        #$self->set_relatives(   \%relatives    );
-    #}
-#}
-
 # the following is only used by the test suite and should not
 # be included in your application:
 
 sub table_definitions {
     return (
         qq{
-            CREATE TABLE poofthing (
+            CREATE TABLE poofcontainer (
                 id                  SERIAL,
-                poofcontainer_id    BIGINT UNSIGNED,
-        
-                FOREIGN KEY (poofcontainer_id) REFERENCES poofcontainer (id)
+                poofone_id          BIGINT UNSIGNED NOT NULL UNIQUE,  -- 1:1
+
+                FOREIGN KEY (poofone_id) REFERENCES poofone (id)
+                    ON DELETE CASCADE
                     ON UPDATE CASCADE
-                    -- but don't do ON DELETE CASCADE or you'll hate yourself
             ) ENGINE=InnoDB
+            -- no supplementary table needed for sCm container relationship
         },
     );
 }
+
 
 1;
 __END__

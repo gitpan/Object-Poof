@@ -7,7 +7,8 @@ use English '-no-match-vars';
 use YAML;
 use Scalar::Util;
 
-use lib qw( ../lib ./testlib );
+use lib qw( ../lib .);
+#use blib;
 
 use Test::More qw( no_plan );
 
@@ -68,13 +69,19 @@ eq_hash(\%relatives_class, \%relatives_obj);
 #diag(Dump(%relatives_class));
 
 
-# test baseclass:
+# test child_rootname:
 
-my $baseclass_1 = $poofone->baseclass;
-my $baseclass_2 = $poofcontainer->baseclass;
+my $child_rootname_1 = $poofone->child_rootname;
+my $child_rootname_2 = $poofcontainer->child_rootname;
 
-ok( $baseclass_1 eq 'TestApp',      q{baseclass eq 'TestApp'} );
-ok( $baseclass_1 eq $baseclass_2,   q{baseclass eq across packages} );
+ok( 
+    $child_rootname_1 eq 'TestApp',
+    q{child_rootname eq 'TestApp'} 
+);
+ok( 
+    $child_rootname_1 eq $child_rootname_2,   
+    q{child_rootname eq across packages} 
+);
 
 
 

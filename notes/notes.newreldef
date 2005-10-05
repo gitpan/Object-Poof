@@ -1,0 +1,232 @@
+
+=head2 Determining relationships
+
+Nested foreign keys determine 1:1 and 1:n relationships between 
+entities, so you should not have to
+duplicate that information in the class definition.  So in the
+class definition, all it has to specify are the tables that 
+belong to a class, and a hash of relatives that contain the
+class name and the table that contains the foreign key to the
+remote object.
+
+So, rel hash format becomes:
+
+my $rels = { 
+    nickname => {
+        class => 'MyApp::Whatsis::Class',
+        table => 'self_to_many_other',
+    },
+
+    nickname => {
+        class => 'MyApp::Other::Or::Same::Class',
+        table => 'self_to_one_other',
+    },
+};
+
+Where the tables are the table that contains the foreign key to the
+remote object.
+
+So in a relationship from each Foo one-to-many Bar, tables would
+look like this:
+
+CREATE TABLE foo (
+    fooname         VARCHAR(16) NOT NULL PRIMARY KEY,
+    phone           VARCHAR(24)                         -- or whatever
+) Type=InnoDB;
+insert into foo (fooname) values ('bob'), ('sally'), ('sue'), ('reynolds');
+
+CREATE TABLE bar (
+    barname         VARCHAR(16) NOT NULL PRIMARY KEY,
+    phone           VARCHAR(24)
+) Type=InnoDB;
+insert into bar (barname) values 
+    ('pig n boar'),                 ('cock n axe'), 
+    ('screaming jehosephat''s'),    ('the anaesthetic tide');
+
+
+CREATE TABLE drunk_foo (
+    fooname         VARCHAR(16) NOT NULL,
+
+    barname         VARCHAR(16) NOT NULL,
+
+    FOREIGN KEY (fooname) REFERENCES foo (fooname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (barname) REFERENCES bar (barname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    PRIMARY KEY (fooname, barname)
+) Type=InnoDB;
+
+
+Our intrepid ship of foos needs work to support their drinking habits.
+So, they get jobs at the bars.  But each person only has time to
+work at one bar, and each bar only needs to employ one person.
+
+CREATE TABLE foo_employed_at_bar (
+    fooname         VARCHAR(16) NOT NULL UNIQUE,
+
+    barname         VARCHAR(16) NOT NULL UNIQUE,
+
+    FOREIGN KEY (fooname) REFERENCES foo (fooname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (barname) REFERENCES bar (barname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    PRIMARY KEY (fooname, barname)      -- nested unique keys enforce 1:1 rel
+) Type=InnoDB;
+
+
+Similarly, make only one of the primary keys have a nested unique key
+in order to determine a 1:Many relationship.  
+
+You can also group other fields in the table as nested unique
+keys to enforce other properties of your system.  For example,
+the bars want to schedule attendance at events.  They have
+arranged never to have events on the same day.
+
+CREATE TABLE foo_attending_bar_parties (
+    party_dt        DATE NOT NULL UNIQUE,
+
+    fooname         VARCHAR(16) NOT NULL,
+
+    barname         VARCHAR(16) NOT NULL,
+
+    FOREIGN KEY (fooname) REFERENCES foo (fooname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (barname) REFERENCES bar (barname)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+
+    PRIMARY KEY (event_dt, barname)     -- nested unique key enforces
+                                        -- only one party per day
+) Type=InnoDB;
+
+Then I can see about getting the exceptions to feed through
+a 'nice message' for display to the web browser through an
+Exception::Class method.  
+
+
+package Drunken::Foo;
+use strict; 
+use warnings;
+use base qw( Object::POOF );
+use Readonly;
+Readonly our %relatives => (
+    bars_frequented => {                    # interpreted as a one-to-many
+        class => 'Drunken::Bar',
+        table => 'drunk_foo',
+    },
+
+    bars_employed_at => {                   # one-to-one
+        class => 'Drunken::Bar',
+        table => 'foo_employed_at_bar',
+    },
+
+    bar_party_schedule => {                 # one (self) to many
+        class => 'Drunken::Bar',
+        table => 'foo_attending_bar_parties',
+    },
+);
+
+Or, you may need to make parties more complicated, and entities 
+in their own right, if you need methods in that frame of reference.
+So the party table would be:
+
+CREATE TABLE party (
+    party_dt            DATE NOT NULL UNIQUE PRIMARY KEY,
+    barname             VARCHAR(16),
+
+    FOREIGN KEY (barname) REFERENCES bar (barname)
+        ON UPDATE CASCADE ON DELETE CASCADE
+
+) Type=InnoDB;
+
+And you'd need to change the party schedule table:
+
+CREATE TABLE foo_attending_bar_parties (
+    party_dt            DATE NOT NULL,
+    fooname             VARCHAR(16) NOT NULL,
+
+    FOREIGN KEY (party_dt) REFERENCES party (party_dt)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    FOREIGN KEY (fooname)  REFERENCES foo (fooname)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    
+    PRIMARY KEY (party_dt, fooname)
+) Type=InnoDB;
+
+Then a Foo would be related 1:M to each Party they planned to go to.
+
+
+package Foo;
+# ...
+Readonly our %relatives => (
+    bars_frequented => {                    # interpreted as a one-to-many
+        class => 'Drunken::Bar',
+        table => 'drunk_foo',
+    },
+
+    bars_employed_at => {                   # one-to-one
+        class => 'Drunken::Bar',
+        table => 'foo_employed_at_bar',
+    },
+
+    party => {                              # one (self) to many
+        class => 'Drunken::Party',
+        table => 'foo_attending_bar_parties',
+    },
+);
+
+package Party;
+# ...
+Readonly our %relatives => (
+    bar => {
+        class => 'Drunken::Bar',  # no table means one of our own tables, in
+    },                            # this case 'party' contains barname F.K.
+
+    guests => {
+        class => 'Drunken::Foo',
+        table => 'foo_attending_bar_parties',
+    },
+);
+
+
+And somewhere in your code dealing with the party schedule, for
+a given foo and a given party, reference it like this to find the bar
+for the party on Halloween of 2005:
+
+    my $foo = Foo->new({ pk => { fooname => 'bob' } });
+
+    my $barname = $foo->party->{20051031}->bar->barname;
+
+In this case, the automethod as inherited by Foo will detect 
+object wanted, so will push 'party' to a Yodel.
+
+What if what it pushed to the Yodel were more information
+than just a stack of strings.  A stack of hashrefs that also
+told it the type of whatever it was doing.  Don't see why not.
+
+So first Want will be OBJECT.  Push name to call stack, return self.
+
+Then Yodel will detect HASHREF wanted. (key 20051031).  Go into
+call stack, save the key with the previous push, and return self.
+
+Then Yodel will detect OBJECT wanted (bar).  Push name to call stack,
+return self.
+
+Then Yodel will detect SCALAR wanted (barname).  Assemble, execute
+and parse SELECT ... JOIN call.
+
+Nicely, Yodel is the package that returns exceptions rethrown by the
+Object::POOF AUTOMETHOD.  So they get spit back to the caller code,
+which can access the simple field, or stringify to get full message.
+

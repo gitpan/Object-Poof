@@ -6,7 +6,8 @@ use Carp;
 use English '-no-match-vars';
 use YAML;
 
-use lib qw( ../lib ./testlib );
+use lib qw( ../lib .);
+#use blib;
 
 use Test::More qw( no_plan );
 
